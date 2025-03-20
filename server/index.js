@@ -9,7 +9,7 @@ const io = require('socket.io')(http, {
 });
 
 const players = new Map();
-const foods = {
+let foods = {
   position: { x: 5, y: 0, z: 0 },
   isBonus: false
 };
@@ -59,11 +59,13 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    console.log('Player disconnected:', socket.id);
     players.delete(socket.id);
     io.emit('players', Array.from(players.values()));
   });
 });
 
-http.listen(3001, () => {
-  console.log('Server running on port 3001');
+const PORT = 3001;
+http.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 }); 

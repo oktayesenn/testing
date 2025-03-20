@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Stars } from '@react-three/drei'
-import { io } from 'socket.io-client'
 import './SnakeGame.css'
 
 function Snake({ position, color }) {
@@ -88,36 +87,31 @@ function Ground() {
   )
 }
 
-function Game({ nickname }) {
-  const [socket, setSocket] = useState(null)
-  const [players, setPlayers] = useState([])
+function Game({ onGameOver }) {
+  const [snakePositions, setSnakePositions] = useState([{ x: 0, y: 0, z: 0 }])
   const [foodPosition, setFoodPosition] = useState({ x: 5, y: 0, z: 0 })
   const [direction, setDirection] = useState({ x: 1, y: 0, z: 0 })
-  const [myPositions, setMyPositions] = useState([{ x: 0, y: 0, z: 0 }])
+  const [foodCount, setFoodCount] = useState(0)
   const [isBonusFood, setIsBonusFood] = useState(false)
+  const [gameOver, setGameOver] = useState(false)
 
-  // Initialize socket connection
-  useEffect(() => {
-    const newSocket = io('http://localhost:3001')
-    setSocket(newSocket)
+  const spawnFood = () => {
+    const newPosition = {
+      x: Math.floor(Math.random() * 20 - 10),
+      y: 0,
+      z: Math.floor(Math.random() * 20 - 10)
+    }
+    setFoodPosition(newPosition)
+    
+    const nextFoodCount = foodCount + 1
+    setFoodCount(nextFoodCount)
+    setIsBonusFood(nextFoodCount % 5 === 0)
+  }
 
-    newSocket.emit('join', nickname)
-
-    newSocket.on('players', (updatedPlayers) => {
-      setPlayers(updatedPlayers)
-    })
-
-    newSocket.on('foodUpdate', (food) => {
-      setFoodPosition(food.position)
-      setIsBonusFood(food.isBonus)
-    })
-
-    return () => newSocket.close()
-  }, [nickname])
-
-  // Handle keyboard controls
   useEffect(() => {
     const handleKeyDown = (event) => {
+      if (gameOver) return
+
       switch (event.key) {
         case 'ArrowUp':
           if (direction.z !== 1) setDirection({ x: 0, y: 0, z: -1 })
@@ -136,14 +130,13 @@ function Game({ nickname }) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [direction])
+  }, [direction, gameOver])
 
-  // Game loop
   useEffect(() => {
-    if (!socket) return
+    if (gameOver) return
 
     const gameLoop = setInterval(() => {
-      setMyPositions(prevPositions => {
+      setSnakePositions(prevPositions => {
         let newHead = {
           x: prevPositions[0].x + direction.x,
           y: 0,
@@ -156,42 +149,44 @@ function Game({ nickname }) {
         if (newHead.z > 10) newHead.z = -10
         if (newHead.z < -10) newHead.z = 10
 
+        // Check self collision
+        if (prevPositions.some(segment => 
+          segment.x === newHead.x && segment.z === newHead.z
+        )) {
+          setGameOver(true)
+          onGameOver(prevPositions.length - 1)
+          return prevPositions
+        }
+
         // Check food collision
         if (Math.abs(newHead.x - foodPosition.x) < 1 && 
             Math.abs(newHead.z - foodPosition.z) < 1) {
-          socket.emit('eatFood')
+          spawnFood()
           return [newHead, ...prevPositions]
         }
 
-        const newPositions = [newHead, ...prevPositions.slice(0, -1)]
-        socket.emit('updatePosition', newPositions)
-        return newPositions
+        return [newHead, ...prevPositions.slice(0, -1)]
       })
     }, 200)
 
     return () => clearInterval(gameLoop)
-  }, [socket, direction, foodPosition])
+  }, [direction, foodPosition, gameOver])
 
   return (
     <>
-      {/* Render all players */}
-      {players.map((player) => (
-        <group key={player.id}>
-          {player.positions.map((pos, index) => (
-            <group key={index}>
-              <Snake 
-                position={[pos.x, pos.y, pos.z]} 
-                color={player.id === socket?.id ? '#4CAF50' : '#ff4444'} 
-              />
-              {index < player.positions.length - 1 && (
-                <SnakeConnector 
-                  startPos={pos}
-                  endPos={player.positions[index + 1]}
-                  color={player.id === socket?.id ? '#388E3C' : '#cc0000'}
-                />
-              )}
-            </group>
-          ))}
+      {snakePositions.map((pos, index) => (
+        <group key={index}>
+          <Snake 
+            position={[pos.x, pos.y, pos.z]} 
+            color={index === 0 ? '#4CAF50' : '#388E3C'} 
+          />
+          {index < snakePositions.length - 1 && (
+            <SnakeConnector 
+              startPos={pos}
+              endPos={snakePositions[index + 1]}
+              color="#388E3C"
+            />
+          )}
         </group>
       ))}
       <Food position={[foodPosition.x, foodPosition.y, foodPosition.z]} isBonus={isBonusFood} />
@@ -247,26 +242,47 @@ function NicknameInput({ onSubmit }) {
   )
 }
 
+function GameOverScreen({ score, onRestart }) {
+  return (
+    <div className="game-over-screen">
+      <div className="game-over-content">
+        <h2>Game Over!</h2>
+        <p>Final Score: <span className="final-score">{score}</span></p>
+        <button onClick={onRestart}>Play Again</button>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [showInstructions, setShowInstructions] = useState(true)
   const [score, setScore] = useState(0)
   const [nickname, setNickname] = useState('')
   const [gameStarted, setGameStarted] = useState(false)
+  const [isGameOver, setIsGameOver] = useState(false)
 
   useEffect(() => {
-    if (gameStarted) {
+    if (gameStarted && !isGameOver) {
       const timer = setTimeout(() => setShowInstructions(false), 5000)
       return () => clearTimeout(timer)
     }
-  }, [gameStarted])
+  }, [gameStarted, isGameOver])
 
-  const handleScoreChange = (points) => {
-    setScore(prev => prev + points)
+  const handleGameOver = (finalScore) => {
+    setScore(finalScore)
+    setIsGameOver(true)
+  }
+
+  const handleRestart = () => {
+    setScore(0)
+    setIsGameOver(false)
+    setGameStarted(false)
   }
 
   const handleNicknameSubmit = (name) => {
     setNickname(name)
     setGameStarted(true)
+    setIsGameOver(false)
   }
 
   if (!gameStarted) {
@@ -286,7 +302,7 @@ function App() {
           shadows
         >
           <color attach="background" args={['#1a1a2e']} />
-          <Game nickname={nickname} />
+          <Game onGameOver={handleGameOver} />
           <OrbitControls enableRotate={false} enableZoom={false} />
         </Canvas>
       </div>
@@ -298,7 +314,7 @@ function App() {
         Score: <span className="score-value">{score}</span>
       </div>
       
-      {showInstructions && (
+      {showInstructions && !isGameOver && (
         <div className="instructions">
           <h2>Welcome {nickname}!</h2>
           <p>Use Arrow Keys to move</p>
@@ -306,6 +322,8 @@ function App() {
           <p>You can move through edges</p>
         </div>
       )}
+
+      {isGameOver && <GameOverScreen score={score} onRestart={handleRestart} />}
     </div>
   )
 }

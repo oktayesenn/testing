@@ -126,4 +126,55 @@
   color: #4CAF50;
   font-weight: bold;
   margin-right: 1rem;
+}
+
+.game-over-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.game-over-content {
+  background: rgba(0, 0, 0, 0.8);
+  padding: 2rem;
+  border-radius: 10px;
+  border: 2px solid #4CAF50;
+  box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+  text-align: center;
+}
+
+.game-over-content h2 {
+  color: #4CAF50;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.game-over-content p {
+  margin: 10px 0;
+}
+
+.game-over-content .final-score {
+  color: #00ff00;
+  font-weight: bold;
+}
+
+.game-over-content button {
+  padding: 0.8rem 1.5rem;
+  background: #4CAF50;
+  border: none;
+  border-radius: 5px;
+  color: white;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.game-over-content button:hover {
+  background: #45a049;
 } 
